@@ -2,6 +2,7 @@ import json
 import logging
 import boto3
 import botocore
+import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -15,6 +16,7 @@ ec2_resource = boto3.resource("ec2")
 
 # Slack Client iInstantiation
 slack_client = WebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
+aws_region = os.environ['AWS_REGION']
 
 def get_iam_role_tags(role_name):
     try:
@@ -41,7 +43,7 @@ def send_slack_alerts(slack_alert_block, user_email):
     channel_id = '@' + user_email.split('@')[0]
     try:
     # Call the conversations.list method using the WebClient
-        result = client.chat_postMessage(
+        result = slack_client.chat_postMessage(
             channel=channel_id, blocks=slack_alert_block,
             text="Important: Non-Compliant EC2 Instance")
         log.info("'statusCode': 200")
@@ -128,9 +130,9 @@ def get_iam_user_email_id(iam_user_name):
     try:
         response = iam_client.list_user_tags(UserName=iam_user_name)
         iam_tag_list = response.get("Tags")
-        log.info(f"'IAM User Tag List': {iam_tag_list}")
         for tag in iam_tag_list:
             if tag['Key'] == 'Owner':
+                log.info(f"'IAM User Email ID from IAM Tags': {tag['Value']}")
                 return tag['Value']
     except botocore.exceptions.ClientError as error:
         log.error(f"Boto3 API returned error: {error}")
@@ -143,15 +145,13 @@ def lambda_handler(event, context):
     mandatory_tags = ['Name', 'Department', 'Project'] 
     instance_name = "Not Specified"
     ec2_instance_id = ''
-    ec2_instance_name_block = "*EC2 Name:*\n" + instance_name
-    project_tag_allowed_values = "*Project   : * DAI, HAIC, HAMC, Aquarium, POCPuddle, EnterprisePuddle, SnowflakePuddle, SparklingWater, Steam, MLOps, H2O3, H2OAutoML \n \n "
-    department_tag_allowed_values = "*Department   : * Engineering, DataScience, ProductManagement, CustomerSuccess, SalesEngineering, SpecialOps \n \n"
-    name_tag_allowed_values = "*Name   :* Meaningful name to identify resource"
+    ec2_instance_name_block = "*EC2 Name:*  " + instance_name
+    project_tag_allowed_values = " :white_small_square: *Project   : * DAI, HAIC, HAMC, Aquarium, POCPuddle, EnterprisePuddle, SnowflakePuddle, SparklingWater, Steam, MLOps, H2O3, H2OAutoML \n"
+    department_tag_allowed_values = " :white_small_square:  *Department   : * Engineering, DataScience, ProductManagement, CustomerSuccess, SalesEngineering, SpecialOps \n"
+    name_tag_allowed_values = " :white_small_square: *Name   :* Meaningful name to identify resource \n"
     mandory_tag_allowed_values = {'Project': project_tag_allowed_values, 'Department' : department_tag_allowed_values, 'Name':  name_tag_allowed_values}
-    missing_mandatory_tag_allowed_values="*Missing Mandatory Tag keys and Allowed Values* \n \n "
-    instance_manage_tag_url="https://console.aws.amazon.com/ec2/v2/home?region=" + aws_region + "#ManageInstanceTags:instanceId=" + ec2_instance_id
+    missing_mandatory_tag_allowed_values="*Missing Mandatory Tag keys and Allowed Values :* \n "
     owner_tag_filter=[{'Name': 'tag:Owner','Values': ['*']},{'Name': 'resource-id','Values': [ec2_instance_id]}]
-    instance_id_filter=[{'Name': 'resource-id','Values': [ec2_instance_id]}]
     slack_alert_block = [
     		{
     			"type": "header",
@@ -165,7 +165,7 @@ def lambda_handler(event, context):
     			"elements": [
     				{
     					"type": "plain_text",
-    					"text": "The EC2 You just created does not have mandotory tags configured."
+    					"text": "The EC2 You just created does not have mandotory tags configured. \n All the EC2s without Mandatory Tags will be deleted within 3 days!"
     				}
     			]
     		},
@@ -187,9 +187,6 @@ def lambda_handler(event, context):
     					"text": ec2_instance_name_block
     				}
     			]
-    		},
-    		{
-    			"type": "divider"
     		},
     		{
     			"type": "section",
@@ -215,7 +212,7 @@ def lambda_handler(event, context):
     				},
     				"value": "click_me_123",
     				"style": "primary",
-    				"url": instance_manage_tag_url,
+    				"url": 'instance_manage_tag_url',
     				"action_id": "button-action"
     			}
     		}
@@ -257,22 +254,24 @@ def lambda_handler(event, context):
     if event_fields.get("instances_set"):
         for item in event_fields.get("instances_set").get("items"):
             ec2_instance_id = item.get("instanceId")
-            for tag in ec2_client.describe_tags( Filters = instance_id_filter )['Tags']:
+            for tag in ec2_client.describe_tags( Filters = [{'Name': 'resource-id','Values': [ec2_instance_id]}] )['Tags']:
+                log.info(f"'EC2 Tag List': {tag}")
                 if tag['Key'] == "Name":
-                    slack_alert_block[4]['fields'][0]['text'] = "*EC2 Name:*\n" + tag['Value']
+                    log.info(f"'EC2 Name from tags': {tag['Value']}")
+                    slack_alert_block[4]['fields'][0]['text'] = "*EC2 Name:   *   " + tag['Value']
                 if tag['Key'] in mandatory_tags:
                     mandatory_tags.remove(tag['Key'])  
                 if tag['Key'] == 'Owner':
-                    if tag['Value'].split('@') == 'h2o.ai':
+                    if tag['Value'].split('@')[1] == 'h2o.ai':
                         user_email = tag['Value']
-                        log.infot(f"'IAM User's Email ID' :{user_email}")
-            log.info("'statusCode': 500")
-            log.info(f"'Owner tag already Exists in Resource ID': {ec2_instance_id}")
+                        log.info(f"'IAM User's Email ID from Tags' :{user_email}")
                 # Checking for other mandatory tags  
             if mandatory_tags:
+                log.info(f"'Missing Mandatory Tags' :{mandatory_tags}")
                 for missing_tag in mandatory_tags:
                     missing_mandatory_tag_allowed_values += mandory_tag_allowed_values[missing_tag]
-                slack_alert_block[6]['text']['text'] = missing_mandatory_tag_allowed_values
+                slack_alert_block[5]['text']['text'] = missing_mandatory_tag_allowed_values
+                slack_alert_block[7]['accessory']['url'] = "https://console.aws.amazon.com/ec2/v2/home?region=" + aws_region + "#ManageInstanceTags:instanceId=" + ec2_instance_id
                 if user_email:
                     send_slack_alerts(slack_alert_block, user_email)
                 else:
