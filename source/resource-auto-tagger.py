@@ -257,7 +257,7 @@ def lambda_handler(event, context):
             for tag in ec2_client.describe_tags( Filters = [{'Name': 'resource-id','Values': [ec2_instance_id]}] )['Tags']:
                 log.info(f"'EC2 Tag List': {tag}")
                 if tag['Key'] == "Name":
-                    log.info(f"'EC2 Name from tags': {tag['Value']}")
+                    log.info(f"'EC2 Name from tags': {tag['Key']}")
                     slack_alert_block[4]['fields'][0]['text'] = "*EC2 Name:   *   " + tag['Value']
                 if tag['Key'] in mandatory_tags:
                     mandatory_tags.remove(tag['Key'])  
