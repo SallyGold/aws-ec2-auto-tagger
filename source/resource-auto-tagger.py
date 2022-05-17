@@ -18,6 +18,7 @@ ec2_resource = boto3.resource("ec2")
 slack_client = WebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
 aws_region = os.environ['AWS_REGION']
 
+#get Tags associated with the IAM Role
 def get_iam_role_tags(role_name):
     try:
         response = iam_client.list_role_tags(RoleName=role_name)
@@ -28,7 +29,7 @@ def get_iam_role_tags(role_name):
         log.error(f"Boto3 API returned error:  {error}")
         return None
 
-
+#get Tags associated with the user
 def get_iam_user_tags(iam_user_name):
     try:
         response = iam_client.list_user_tags(UserName=iam_user_name)
@@ -39,6 +40,7 @@ def get_iam_user_tags(iam_user_name):
         log.error(f"Boto3 API returned error: {error}")
         return None
 
+#Sending Slack alerts using slack_sdk to the IAM user. 
 def send_slack_alerts(slack_alert_block, user_email):
     channel_id = '@' + user_email.split('@')[0]
     try:
@@ -125,7 +127,7 @@ def cloudtrail_event_parser(event):
     returned_event_fields["resource_date"] = event.get("detail").get("eventTime")
 
     return returned_event_fields
-
+#The Email of the IAM user is saved under the "Owner" tag, This functioned is used to retrieve that value.
 def get_iam_user_email_id(iam_user_name):
     try:
         response = iam_client.list_user_tags(UserName=iam_user_name)
@@ -138,7 +140,7 @@ def get_iam_user_email_id(iam_user_name):
         log.error(f"Boto3 API returned error: {error}")
         return None
 
-
+#Main function, creates the Slack message body, finds missing mandatory tags, identifies resources with "Owner" tag and resources which do not have that.
 def lambda_handler(event, context):
     resource_tags = []
     user_email = False
