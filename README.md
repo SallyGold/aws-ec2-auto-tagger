@@ -10,7 +10,7 @@ Once the "Owner" tag is added, check for other pre-defined mandatory tags. If at
 
 
  
-Find the complete Guide on here. [Automatically tag AWS EC2 Instances with the “Owner” tag upon creation]([https://pages.github.com/](https://grumpysysadmin.medium.com/automatically-tag-aws-ec2-instances-with-the-owner-tag-upon-creation-7ea7b230a2d0)).
+Find the complete Guide on here. [Automatically tag AWS EC2 Instances with the “Owner” tag upon creation](https://grumpysysadmin.medium.com/automatically-tag-aws-ec2-instances-with-the-owner-tag-upon-creation-7ea7b230a2d0).
 
 Inspired by and initial code base from https://aws.amazon.com/blogs/mt/auto-tag-aws-resources/
 
